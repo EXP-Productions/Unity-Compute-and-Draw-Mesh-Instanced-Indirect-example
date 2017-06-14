@@ -1,0 +1,4 @@
+sceneSetups:
+- path: Assets/Compute shader example/compute draw mesh indirect test.unity
+  isLoaded: 1
+  isActive: 1

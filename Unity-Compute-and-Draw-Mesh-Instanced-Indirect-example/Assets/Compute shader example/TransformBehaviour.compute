@@ -1,0 +1,79 @@
+﻿
+
+// CV - float[] normalized Curve, float timing, float range
+// Tfrom behaviour - float3 base pos, float3 base rot, float base scale
+// Tfrom behaviour - float3[] pos offset curve, float3[] rot  offset curve, float[] scale  offset curve
+
+struct Transform
+{
+	float4 position;
+	float4 rotation;
+	float4 scale;
+};
+
+#pragma kernel TransformUpdate
+RWStructuredBuffer<Transform>	ModifiedTransformBuffer;   
+StructuredBuffer<Transform>		BaseTransformBuffer;
+
+// Ranged curves used to calculate the offset on x y z axis. **** Speeds saved in w of element 0, 1, 2 *****
+StructuredBuffer<float4>	PositionCurve;
+StructuredBuffer<float4>	RotationCurve;
+StructuredBuffer<float4>	ScaleCurve;
+
+float Time;
+float InstanceCount;
+
+
+float3 SampleOffset(float norm, float time, StructuredBuffer<float4> curve)
+{ 
+	// normalized x y z samples
+	float3 normSamples = float3(frac(norm + (time * curve[0].w)),
+								frac(norm + (time * curve[1].w)),
+								frac(norm + (time * curve[2].w)));
+
+	//uint count, stride;
+	//ModifiedTransformBuffer.GetDimensions(count, stride);
+
+
+	// X
+	int indexX0 = floor(normSamples.x * InstanceCount);
+	int indexX1 = fmod(indexX0 + 1, InstanceCount);
+	float lerpX = frac(normSamples.x * InstanceCount);
+	//lerpX = floor((indexX0 + 1) / InstanceCount); 
+
+	// Y
+	int indexY0 = floor(normSamples.y * InstanceCount);
+	int indexY1 = fmod(indexY0 + 1, InstanceCount);
+	float lerpY = frac(normSamples.y * InstanceCount);
+
+	// Z
+	int indexZ0 = floor(normSamples.z * InstanceCount);
+	int indexZ1 = fmod(indexZ0 + 1, InstanceCount);
+	float lerpZ = frac(normSamples.z * InstanceCount);
+
+	return float3(lerp(curve[indexX0].x, curve[indexX1].x, lerpX),
+		lerp(curve[indexY0].y, curve[indexY1].y, lerpY),
+		lerp(curve[indexZ0].z, curve[indexZ1].z, lerpZ));
+}
+
+
+//[numthreads(64, 1, 1)]
+[numthreads(1, 1, 1)]
+void TransformUpdate(uint id : SV_DispatchThreadID)
+{
+	// normalized value
+	float norm = id / InstanceCount; 
+
+	// Position offset
+	float3 posOffset = SampleOffset(norm, Time, PositionCurve);	
+	float3 rotOffset = SampleOffset(norm, Time, RotationCurve);
+	float3 scaleOffset = SampleOffset(norm, Time, ScaleCurve);
+
+	
+	ModifiedTransformBuffer[id].position.xyz = posOffset;
+	ModifiedTransformBuffer[id].rotation.xyz = rotOffset;
+	ModifiedTransformBuffer[id].scale.xyz = BaseTransformBuffer[id].scale.xyz * scaleOffset;
+	
+}
+
+
